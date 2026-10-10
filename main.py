@@ -2,7 +2,7 @@ import sqlite3, random, string
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from pydantic import BaseModel, HttpUrl
 
 app = FastAPI()
@@ -13,13 +13,17 @@ db.execute("CREATE TABLE IF NOT EXISTS links "
 class LinkIn(BaseModel):
     url: HttpUrl
     custom_code: Optional[str] = None
-    expires_in_days: Optional[int] = None   # leave empty = never expires
+    expires_in_days: Optional[int] = None
 
 def make_code(n=6):
     return "".join(random.choices(string.ascii_letters + string.digits, k=n))
 
 def code_exists(code):
     return db.execute("SELECT 1 FROM links WHERE code=?", (code,)).fetchone() is not None
+
+@app.get("/")
+def home():
+    return FileResponse("index.html")
 
 @app.post("/shorten")
 def shorten(link: LinkIn):

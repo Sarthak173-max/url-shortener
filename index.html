@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Link Shortener</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex;
+           justify-content: center; padding-top: 80px; }
+    .card { background: white; padding: 30px; border-radius: 12px; width: 420px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    h1 { margin-top: 0; }
+    input { width: 100%; padding: 10px; margin: 6px 0 12px; box-sizing: border-box;
+            border: 1px solid #ccc; border-radius: 6px; }
+    button { width: 100%; padding: 12px; background: #2563eb; color: white;
+             border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    #result { margin-top: 16px; word-break: break-all; }
+    .error { color: #dc2626; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Link Shortener</h1>
+    <label>Long link</label>
+    <input id="url" placeholder="https://example.com/very/long/link">
+    <label>Custom nickname (optional)</label>
+    <input id="code" placeholder="mybook">
+    <label>Expires in days (optional)</label>
+    <input id="days" type="number" placeholder="7">
+    <button onclick="shorten()">Shorten</button>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    async function shorten() {
+      const body = { url: document.getElementById("url").value };
+      const code = document.getElementById("code").value.trim();
+      const days = document.getElementById("days").value;
+      if (code) body.custom_code = code;
+      if (days) body.expires_in_days = parseInt(days);
+
+      const res = await fetch("/shorten", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      const out = document.getElementById("result");
+      if (res.ok) {
+        out.innerHTML = 'Your short link: <a href="' + data.short_url + '" target="_blank">'
+                        + data.short_url + '</a>';
+      } else {
+        const msg = typeof data.detail === "string" ? data.detail : "Please enter a valid link.";
+        out.innerHTML = '<span class="error">' + msg + '</span>';
+      }
+    }
+  </script>
+</body>
+</html>
