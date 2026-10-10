@@ -57,7 +57,8 @@ def shorten(request: Request, link: LinkIn):
     db.execute("INSERT INTO links (code, url, expires_at) VALUES (?, ?, ?)",
                (code, str(link.url), expires_at))
     db.commit()
-    return {"short_url": f"http://127.0.0.1:8000/{code}", "expires_at": expires_at}
+    base = str(request.base_url).rstrip("/")
+    return {"short_url": f"{base}/{code}", "expires_at": expires_at}
 
 @app.get("/stats/{code}")
 def stats(code: str):
