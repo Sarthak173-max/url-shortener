@@ -1,4 +1,6 @@
 import sqlite3, random, string
+from datetime import datetime, timedelta
+from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, HttpUrl
@@ -6,33 +8,55 @@ from pydantic import BaseModel, HttpUrl
 app = FastAPI()
 db = sqlite3.connect("links.db", check_same_thread=False)
 db.execute("CREATE TABLE IF NOT EXISTS links "
-           "(code TEXT PRIMARY KEY, url TEXT, clicks INTEGER DEFAULT 0)")
+           "(code TEXT PRIMARY KEY, url TEXT, clicks INTEGER DEFAULT 0, expires_at TEXT)")
 
 class LinkIn(BaseModel):
-    url: HttpUrl          # refuses things that aren't real links
+    url: HttpUrl
+    custom_code: Optional[str] = None
+    expires_in_days: Optional[int] = None   # leave empty = never expires
 
 def make_code(n=6):
     return "".join(random.choices(string.ascii_letters + string.digits, k=n))
 
+def code_exists(code):
+    return db.execute("SELECT 1 FROM links WHERE code=?", (code,)).fetchone() is not None
+
 @app.post("/shorten")
 def shorten(link: LinkIn):
-    code = make_code()
-    db.execute("INSERT INTO links (code, url) VALUES (?, ?)", (code, str(link.url)))
+    if link.custom_code:
+        code = link.custom_code
+        if code in ("shorten", "stats", "docs", "openapi.json"):
+            raise HTTPException(400, "That nickname is reserved")
+        if code_exists(code):
+            raise HTTPException(409, "That nickname is already taken")
+    else:
+        code = make_code()
+        while code_exists(code):
+            code = make_code()
+
+    expires_at = None
+    if link.expires_in_days:
+        expires_at = (datetime.utcnow() + timedelta(days=link.expires_in_days)).isoformat()
+
+    db.execute("INSERT INTO links (code, url, expires_at) VALUES (?, ?, ?)",
+               (code, str(link.url), expires_at))
     db.commit()
-    return {"short_url": f"http://127.0.0.1:8000/{code}"}
+    return {"short_url": f"http://127.0.0.1:8000/{code}", "expires_at": expires_at}
 
 @app.get("/stats/{code}")
 def stats(code: str):
-    row = db.execute("SELECT url, clicks FROM links WHERE code=?", (code,)).fetchone()
+    row = db.execute("SELECT url, clicks, expires_at FROM links WHERE code=?", (code,)).fetchone()
     if not row:
         raise HTTPException(404, "Link not found")
-    return {"url": row[0], "clicks": row[1]}
+    return {"url": row[0], "clicks": row[1], "expires_at": row[2]}
 
 @app.get("/{code}")
 def go(code: str):
-    row = db.execute("SELECT url FROM links WHERE code=?", (code,)).fetchone()
+    row = db.execute("SELECT url, expires_at FROM links WHERE code=?", (code,)).fetchone()
     if not row:
         raise HTTPException(404, "Link not found")
+    if row[1] and datetime.utcnow() > datetime.fromisoformat(row[1]):
+        raise HTTPException(410, "This link has expired")
     db.execute("UPDATE links SET clicks = clicks + 1 WHERE code=?", (code,))
     db.commit()
     return RedirectResponse(row[0])
